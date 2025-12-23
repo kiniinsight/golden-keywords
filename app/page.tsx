@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 
+// 데이터 타입 정의
 type KeywordData = {
   keyword: string;
   rank: number;
@@ -10,7 +11,7 @@ type KeywordData = {
   score: number;
 };
 
-// ✨ [추가] 로딩 컴포넌트: 별도 파일로 분리해도 되지만 편의상 여기에 작성
+// ✨ 로딩 애니메이션 컴포넌트
 const MiningLoader = ({ message }: { message: string }) => {
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm transition-all duration-300">
@@ -53,10 +54,9 @@ export default function Home() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<KeywordData[]>([]);
-  
-  // ✨ [추가] 로딩 메시지 상태 관리
   const [loadingMsg, setLoadingMsg] = useState('시스템 초기화 중...');
 
+  // 로딩 메시지 목록
   const loadingMessages = [
     "Google 연관 검색어 수집 중...",
     "잠재 트래픽 데이터 분석 중...",
@@ -66,27 +66,36 @@ export default function Home() {
     "데이터 정렬 및 시각화 중..."
   ];
 
+  // ✨ [핵심] 실시간 키워드 개수 계산 및 제한 확인
+  // 콤마(,)나 줄바꿈(\n)으로 쪼개고 빈 값은 제거한 뒤 개수 셈
+  const keywordsList = input.split(/,|\n/).map(k => k.trim()).filter(k => k);
+  const keywordCount = keywordsList.length;
+  const isOverLimit = keywordCount > 3; // 3개 초과 여부
+
   const handleAnalyze = async () => {
+    // 입력값이 없거나 3개를 초과하면 실행 막음
     if (!input.trim()) return;
+    if (isOverLimit) {
+      alert('키워드는 한 번에 최대 3개까지만 분석 가능합니다.');
+      return;
+    }
     
     setLoading(true);
     setData([]);
 
-    // ✨ [추가] 로딩 메시지 롤링 효과 (가짜 진행 상황 보여주기)
+    // 로딩 메시지 롤링 효과
     let msgIndex = 0;
     setLoadingMsg(loadingMessages[0]);
     const msgInterval = setInterval(() => {
       msgIndex = (msgIndex + 1) % loadingMessages.length;
       setLoadingMsg(loadingMessages[msgIndex]);
-    }, 800); // 0.8초마다 메시지 변경
-
-    const keywords = input.split(/,|\n/).map(k => k.trim()).filter(k => k);
+    }, 800);
 
     try {
       const res = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ keywords }),
+        body: JSON.stringify({ keywords: keywordsList }),
       });
       
       const json = await res.json();
@@ -98,14 +107,14 @@ export default function Home() {
     } catch (err) {
       alert('분석 중 오류가 발생했습니다.');
     } finally {
-      clearInterval(msgInterval); // 타이머 종료
+      clearInterval(msgInterval);
       setLoading(false);
     }
   };
 
   return (
     <div className="min-h-screen bg-gray-50 py-10 px-4">
-      {/* ✨ [추가] 로딩 중일 때 전체 화면 오버레이 표시 */}
+      {/* 로딩 오버레이 */}
       {loading && <MiningLoader message={loadingMsg} />}
 
       <div className="max-w-5xl mx-auto">
@@ -116,29 +125,51 @@ export default function Home() {
           </p>
         </div>
 
+        {/* 입력 섹션 */}
         <div className="bg-white p-6 rounded-xl shadow-lg mb-8 transition-all hover:shadow-xl">
           <label className="block text-sm font-medium text-gray-700 mb-2">
             분석할 키워드 입력 (콤마나 줄바꿈으로 구분)
           </label>
+          
           <textarea
-            className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition resize-none"
+            className={`w-full border rounded-lg p-3 transition resize-none outline-none
+              ${isOverLimit 
+                ? 'border-red-500 ring-2 ring-red-200 focus:ring-red-500' // 3개 넘으면 빨간 경고
+                : 'border-gray-300 focus:ring-2 focus:ring-indigo-500'    // 평소엔 파란색
+              }
+            `}
             rows={3}
             placeholder="예: 인디해커, SaaS, 직장인 부업"
             value={input}
             onChange={(e) => setInput(e.target.value)}
           />
+
+          {/* ✨ 실시간 카운터 및 경고 문구 */}
+          <div className="flex justify-between items-center mt-2 px-1">
+             <span className={`text-xs font-bold transition-colors duration-200 ${isOverLimit ? 'text-red-600 animate-pulse' : 'text-gray-500'}`}>
+               {isOverLimit ? '🚨 최대 3개까지만 입력 가능합니다.' : '※ 한 번에 최대 3개까지 분석 가능'}
+             </span>
+             <span className={`text-sm font-mono font-bold ${isOverLimit ? 'text-red-600' : 'text-gray-400'}`}>
+               {keywordCount} / 3
+             </span>
+          </div>
+
           <button
             onClick={handleAnalyze}
-            disabled={loading}
-            className={`mt-4 w-full py-3 rounded-lg font-bold text-white transition-all transform active:scale-95
-              ${loading ? 'bg-indigo-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 shadow-md hover:shadow-lg'}
+            // 로딩 중이거나, 3개를 넘었거나, 입력값이 없으면 버튼 비활성화
+            disabled={loading || isOverLimit || keywordCount === 0}
+            className={`mt-4 w-full py-3 rounded-lg font-bold text-white transition-all transform active:scale-[0.98]
+              ${(loading || isOverLimit || keywordCount === 0)
+                ? 'bg-gray-400 cursor-not-allowed' 
+                : 'bg-indigo-600 hover:bg-indigo-700 shadow-md hover:shadow-lg'
+              }
             `}
           >
             🚀 키워드 분석 시작
           </button>
         </div>
 
-        {/* 결과 테이블 (기존 코드 유지) */}
+        {/* 결과 테이블 */}
         {data.length > 0 && (
           <div className="bg-white rounded-xl shadow-lg overflow-hidden animate-fade-in-up">
             <div className="p-5 border-b border-gray-100 flex justify-between items-center">
@@ -198,7 +229,7 @@ export default function Home() {
         )}
       </div>
 
-      {/* 페이드인 애니메이션용 스타일 */}
+      {/* 페이드인 애니메이션 스타일 */}
       <style jsx global>{`
         @keyframes fadeInUp {
           from { opacity: 0; transform: translateY(20px); }

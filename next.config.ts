@@ -1,5 +1,8 @@
+import type { NextConfig } from 'next';
+
 /** @type {import('next').NextConfig} */
-const nextConfig = {
+const nextConfig: NextConfig = {
+  devIndicators: false,
   async headers() {
     return [
       // ... 위 iframe 설정 ...
